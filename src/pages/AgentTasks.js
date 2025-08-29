@@ -101,7 +101,7 @@ const AgentTasks = () => {
     try {
       const token = localStorage.getItem("token");
     const res =  await axios.post(
-        `http://localhost:5000/api/tasks/${taskId}`,
+        `https://taskflow-server-qmtw.onrender.com/api/tasks/${taskId}`,
         { status: newStatus },
         {
           headers: {
@@ -302,3 +302,4 @@ const AgentTasks = () => {
 };
 
 export default AgentTasks;
+
