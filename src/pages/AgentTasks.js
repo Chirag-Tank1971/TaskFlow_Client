@@ -100,8 +100,8 @@ const AgentTasks = () => {
   const handleStatusUpdate = async (taskId, newStatus) => {
     try {
       const token = localStorage.getItem("token");
-      await axios.patch(
-        `https://taskflow-server-qmtw.onrender.com/api/tasks/${taskId}`,
+    const res =  await axios.post(
+        `http://localhost:5000/api/tasks/${taskId}`,
         { status: newStatus },
         {
           headers: {
@@ -109,10 +109,12 @@ const AgentTasks = () => {
           },
         }
       );
-      
+    
+      const updatedTask = res.data;
+
       // Update the task in the local state
       setTasks(tasks.map(task => 
-        task._id === taskId ? { ...task, status: newStatus } : task
+        task._id === updatedTask._id ? updatedTask:task
       ));
       
       setSuccess(`Task marked as ${newStatus.toLowerCase()}`);
@@ -236,16 +238,23 @@ const AgentTasks = () => {
                         <FaTrash className="w-5 h-5" />
                       </button>
                       
-                      {task.status === "pending" ? (
+                     {task.status === "pending" ? (
                         <button
-                          onClick={() => handleStatusUpdate(task._id, "Completed")}
+                          onClick={() => handleStatusUpdate(task._id, "in-progress")}
+                          className="bg-yellow-600 text-white px-3 py-1 rounded text-sm flex items-center gap-1 hover:bg-yellow-700 transition-colors"
+                        >
+                          <MdPendingActions /> Start Progress
+                        </button>
+                      ) : task.status === "in-progress" ? (
+                        <button
+                          onClick={() => handleStatusUpdate(task._id, "completed")}
                           className="bg-green-600 text-white px-3 py-1 rounded text-sm flex items-center gap-1 hover:bg-green-700 transition-colors"
                         >
                           <FaCheckCircle /> Mark Complete
                         </button>
                       ) : (
                         <button
-                          onClick={() => handleStatusUpdate(task._id, "Pending")}
+                          onClick={() => handleStatusUpdate(task._id, "pending")}
                           className="bg-gray-600 text-white px-3 py-1 rounded text-sm flex items-center gap-1 hover:bg-gray-700 transition-colors"
                         >
                           <MdPendingActions /> Mark Pending
@@ -254,12 +263,14 @@ const AgentTasks = () => {
                     </div>
                   </div>
 
+                  
+
                   <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-700">
                     <p className="text-sm font-medium text-white">
                       Status:{" "}
                       <span
-                        className={`font-semibold ${
-                          task.status === "Completed"
+                        className={`font-semibold uppercase ${
+                          task.status === "completed"
                             ? "text-green-400"
                             : "text-red-400"
                         }`}
@@ -280,7 +291,7 @@ const AgentTasks = () => {
       
         {/* Confirmation Modal - Now properly placed inside the return statement */}
         <ConfirmationModal
-          isOpen={isDeleteModalOpen}
+          isOpen={  isDeleteModalOpen}
           onClose={() => setIsDeleteModalOpen(false)}
           onConfirm={() => handleTaskDeletion(taskToDelete)}
           message="Are you sure you want to delete this task?"
