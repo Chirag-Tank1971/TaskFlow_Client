@@ -385,6 +385,14 @@ const Tasks = ({ agentId }) => {
               <p className="text-lg font-semibold">{task.firstName}</p>
               <p className="text-sm text-gray-400">Phone: {task.phone}</p>
               <p className="text-sm text-gray-400">Notes: {task.notes}</p>
+              <p className="text-sm text-gray-300">Status: <span className={`uppercase ${
+                        task.status === "pending"
+                          ? "text-red-400"
+                          : task.status === "completed"
+                          ? "text-green-400"
+                          : "text-yellow-400"
+                      }`}>{task.status}</span></p>
+
             </li>
           ))}
         </ul>
