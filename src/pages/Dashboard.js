@@ -6,7 +6,7 @@ import axios from "axios";
 const Dashboard = () => {
   // Retrieve the logged-in user's information from localStorage
   const user = localStorage.getItem("user"); //Assuming user data is stored in localStorage
-  console.log(user.name);
+  const userName = localStorage.getItem("userName");
   const token = localStorage.getItem("token");
   const handleLogout = async () => {
     await axios.get("https://taskflow-server-qmtw.onrender.com/api/auth/logout", {
@@ -23,7 +23,7 @@ const Dashboard = () => {
       <div className="bg-gray-800 bg-opacity-80 backdrop-blur-lg p-8 rounded-2xl shadow-2xl max-w-md w-full transform transition-all hover:shadow-3xl">
         {/* Welcome Message */}
         <h2 className="text-3xl font-extrabold text-center mb-4 text-gray-200">
-          Welcome,{user ? user.name : "Admin"}! 👋
+          Welcome,${userName}! 👋
         </h2>
         <p className="text-center text-gray-400 mb-6">What would you like to do today?</p>
 
@@ -65,6 +65,7 @@ const Dashboard = () => {
 
 
 export default Dashboard;
+
 
 
 
