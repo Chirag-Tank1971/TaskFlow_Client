@@ -5,8 +5,8 @@ import axios from "axios";
 
 const Dashboard = () => {
   // Retrieve the logged-in user's information from localStorage
-  const user = JSON.parse((localStorage.getItem("user")); //Assuming user data is stored in localStorage
-  console.log(user)
+  const user = JSON.parse(localStorage.getItem("user")); //Assuming user data is stored in localStorage
+  console.log(user);
   const token = localStorage.getItem("token");
   const handleLogout = async () => {
     await axios.get("https://taskflow-server-qmtw.onrender.com/api/auth/logout", {
@@ -65,4 +65,5 @@ const Dashboard = () => {
 
 
 export default Dashboard;
+
 
