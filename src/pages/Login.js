@@ -26,6 +26,7 @@ const Login = () => {
       );
       localStorage.setItem("token", JSON.stringify(res.data.token));
       localStorage.setItem("user", JSON.stringify(res.data.user));
+      localStorage.setItem("userName", res.data.user.name);
       navigate("/dashboard");
     } catch (err) {
       setError(
@@ -138,3 +139,4 @@ const Login = () => {
 };
 
 export default Login;
+
