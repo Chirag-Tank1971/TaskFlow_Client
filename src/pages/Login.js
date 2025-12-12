@@ -1,9 +1,19 @@
 import React, { useState } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { FaEye, FaEyeSlash, FaUser } from "react-icons/fa";
-import { Link } from "react-router-dom";
+import {
+  FaEye,
+  FaEyeSlash,
+  FaUser,
+  FaEnvelope,
+  FaLock,
+  FaTasks,
+  FaSpinner,
+} from "react-icons/fa";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import API_BASE_URL from "../config/api";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -18,21 +28,48 @@ const Login = () => {
     setLoading(true);
     setError("");
 
+    // Validate email format
+    if (!email || !email.includes("@")) {
+      setError("Please enter a valid email address");
+      toast.error("Please enter a valid email address");
+      setLoading(false);
+      return;
+    }
+
+    // Prevent agent emails from admin login
+    if (email.toLowerCase().endsWith("@agent.com")) {
+      setError("Please use Agent Login for agent accounts");
+      toast.error("Please use Agent Login for agent accounts");
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await axios.post(
-        "https://taskflow-server-qmtw.onrender.com/api/auth/login",
+        `${API_BASE_URL}/api/auth/login`,
         { email, password },
         { withCredentials: true }
       );
-      localStorage.setItem("token", JSON.stringify(res.data.token));
+
+      // Store token consistently (as plain string for now, can be JSON if needed)
+      const token = res.data.token;
+      localStorage.setItem("token", token);
       localStorage.setItem("user", JSON.stringify(res.data.user));
       localStorage.setItem("userName", res.data.user.name);
-      navigate("/dashboard");
+
+      toast.success("Login successful! Redirecting...");
+      
+      // Small delay for toast visibility
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 500);
     } catch (err) {
-      setError(
-        "Invalid credentials. Please try again. If Agent Login Using Agent Login !"
-      );
-      console.log(err);
+      const errorMessage =
+        err.response?.data?.message ||
+        "Invalid credentials. Please try again.";
+      setError(errorMessage);
+      toast.error(errorMessage);
+      console.error("Login Error:", err);
     } finally {
       setLoading(false);
     }
@@ -43,100 +80,156 @@ const Login = () => {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-      className="min-h-screen flex  items-center justify-center bg-gradient-to-r from-purple-600 to-blue-600"
-    >
-      <a
-        href="/agent/login"
-        className="absolute flex gap-2 pl-5 items-center right-5 top-10 w-[300px] bg-gradient-to-r from-gray-700 to-black text-white py-2 rounded-lg font-bold hover:from-gray-800 hover:to-gray-900 hover:text-gray-200 transition-all duration-300 transform hover:py-5"
-      >
-        <FaUser className="text-white" />
-        Unlock Your Agent Account
-      </a>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 relative overflow-hidden">
+      {/* Toast Container */}
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        closeOnClick
+        pauseOnHover
+        draggable
+      />
 
+      {/* Decorative Background Elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 left-20 w-72 h-72 bg-indigo-500/20 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-20 right-20 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-pink-500/20 rounded-full blur-3xl"></div>
+      </div>
+
+      {/* Agent Login Link */}
+      <Link
+        to="/agent/login"
+        className="absolute top-6 right-6 flex items-center gap-2 px-4 py-2 bg-slate-800/80 backdrop-blur-sm text-white rounded-lg font-medium hover:bg-slate-700/80 transition-all border border-slate-700/50 shadow-lg z-10"
+      >
+        <FaUser className="text-orange-400" />
+        <span className="hidden sm:inline">Agent Login</span>
+      </Link>
+
+      {/* Main Login Card */}
       <motion.div
-        initial={{ y: -50, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
+        initial={{ opacity: 0, y: -50 }}
+        animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.2 }}
-        className="bg-white p-8 rounded-2xl shadow-2xl w-96 transform transition-all hover:scale-105"
+        className="relative z-10 w-full max-w-md mx-4"
       >
-        <h2 className="text-4xl font-extrabold text-center mb-8 text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-blue-600">
-          Welcome Back
-        </h2>
-
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded-lg mb-4 text-sm">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleLogin} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email
-            </label>
-            <input
-              type="email"
-              placeholder="Enter your email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-            />
+        <div className="bg-slate-800/50 backdrop-blur-xl rounded-2xl p-8 shadow-2xl border border-slate-700/50">
+          {/* Logo and Title */}
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-2xl mb-4 shadow-lg">
+              <FaTasks className="text-white text-2xl" />
+            </div>
+            <h2 className="text-4xl font-extrabold mb-2 bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+              Welcome Back
+            </h2>
+            <p className="text-slate-400 text-sm">Sign in to your admin account</p>
           </div>
 
-          <div className="relative">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Password
-            </label>
-            <input
-              type={showPassword ? "text" : "password"}
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-            />
-            <button
-              type="button"
-              onClick={togglePasswordVisibility}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-purple-600 transition-all"
-              style={{ top: "55%" }}
+          {/* Error Message */}
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg mb-4 text-sm flex items-center gap-2"
             >
-              {showPassword ? <FaEyeSlash /> : <FaEye />}
+              <FaSpinner className="text-red-400" />
+              {error}
+            </motion.div>
+          )}
+
+          {/* Login Form */}
+          <form onSubmit={handleLogin} className="space-y-5">
+            {/* Email Input */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Email Address
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <FaEnvelope className="text-slate-400" />
+                </div>
+                <input
+                  type="email"
+                  placeholder="Enter your email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoFocus
+                  className="w-full pl-10 pr-4 py-3 bg-slate-700/50 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all placeholder:text-slate-500"
+                />
+              </div>
+            </div>
+
+            {/* Password Input */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Password
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <FaLock className="text-slate-400" />
+                </div>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full pl-10 pr-12 py-3 bg-slate-700/50 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all placeholder:text-slate-500"
+                />
+                <button
+                  type="button"
+                  onClick={togglePasswordVisibility}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-indigo-400 transition-colors"
+                >
+                  {showPassword ? <FaEyeSlash /> : <FaEye />}
+                </button>
+              </div>
+            </div>
+
+            {/* Login Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white py-3 rounded-lg font-semibold hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none shadow-lg"
+            >
+              {loading ? (
+                <div className="flex items-center justify-center gap-2">
+                  <FaSpinner className="animate-spin" />
+                  <span>Signing in...</span>
+                </div>
+              ) : (
+                "Sign In"
+              )}
             </button>
+          </form>
+
+          {/* Divider */}
+          <div className="mt-6 mb-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-700"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-slate-800/50 text-slate-400">Or</span>
+              </div>
+            </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 rounded-lg font-semibold hover:from-purple-700 hover:to-blue-700 transition-all transform hover:scale-105"
-          >
-            {loading ? (
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mx-auto"></div>
-            ) : (
-              "Login"
-            )}
-          </button>
-        </form>
-
-        <div className="mt-3">
-          <p className="text-center text-gray-600 mb-4">Or</p>
-        </div>
-        <div className="mt-5 text-center">
-          <Link to={"/signup"}>
-            <button className="w-full bg-gradient-to-r from-purple-600 to-red-600 text-white py-3 rounded-lg font-semibold hover:from-purple-700 hover:to-red-700 transition-all transform hover:scale-105">
-              Create New Account
-            </button>
-          </Link>
+          {/* Signup Link */}
+          <div className="text-center">
+            <p className="text-slate-400 text-sm mb-4">Don't have an account?</p>
+            <Link to="/signup">
+              <button className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all transform hover:scale-[1.02] shadow-lg">
+                Create New Account
+              </button>
+            </Link>
+          </div>
         </div>
       </motion.div>
-    </motion.div>
+    </div>
   );
 };
 
 export default Login;
-

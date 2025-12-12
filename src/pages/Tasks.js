@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import API_BASE_URL from "../config/api";
 
 const Tasks = ({ agentId }) => {
   console.log("agentId:", agentId); // Debugging
@@ -33,7 +34,7 @@ const Tasks = ({ agentId }) => {
     }
 
     try {
-      const response = await axios.get(`https://taskflow-server-qmtw.onrender.com/api/auth/tasks/${agentId}`, {
+      const response = await axios.get(`${API_BASE_URL}/api/auth/tasks/${agentId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

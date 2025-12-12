@@ -11,6 +11,7 @@ import Agents from "./pages/Agents";
 import AgentEdit from "./pages/EditAgent"
 import UploadCSV from "./pages/UploadCSV";
 import Tasks from "./pages/Tasks";
+import Analytics from "./pages/Analytics";
 import ProtectedRoute from "./components/ProtectedRoute";
 function App() {
   return (
@@ -60,6 +61,11 @@ function App() {
             <UploadCSV />
           </ProtectedRoute>
 
+        } />
+        <Route path="/analytics" element={
+          <ProtectedRoute>
+            <Analytics />
+          </ProtectedRoute>
         } />
         <Route path="/tasks/:agentId" element={
           <ProtectedRoute>
