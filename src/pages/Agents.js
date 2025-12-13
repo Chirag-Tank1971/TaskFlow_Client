@@ -28,6 +28,7 @@ import {
 import { useNavigate, Link } from "react-router-dom";
 import API_BASE_URL from "../config/api";
 import CategoryBadge from "../components/CategoryBadge";
+import CategoryFilter from "../components/CategoryFilter";
 // Enhanced Confirmation Modal Component
 const ConfirmationModal = ({ isOpen, onClose, onConfirm, message, title = "Confirm Action" }) => {
   if (!isOpen) return null;
@@ -459,14 +460,86 @@ const AgentCard = ({ agent, onSelect, onDelete, onViewTasks, isSelected }) => {
 // Agent Tasks Panel Component
 const AgentTasksPanel = ({ agentId, agentName, onClose }) => {
   const [tasks, setTasks] = useState([]);
+  const [filteredTasks, setFilteredTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  
+  // Filter states
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("date-desc");
+  
+  // Stats
+  const [stats, setStats] = useState({
+    total: 0,
+    pending: 0,
+    inProgress: 0,
+    completed: 0
+  });
 
   useEffect(() => {
     if (agentId) {
       fetchTasks();
     }
   }, [agentId]);
+  
+  // Filter and sort tasks
+  useEffect(() => {
+    let filtered = [...tasks];
+    
+    // Apply status filter
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((task) => task.status === statusFilter);
+    }
+    
+    // Apply category filter
+    if (categoryFilter !== "All") {
+      filtered = filtered.filter((task) => (task.category || "General") === categoryFilter);
+    }
+    
+    // Apply search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (task) =>
+          task.firstName?.toLowerCase().includes(query) ||
+          task.phone?.includes(query) ||
+          task.notes?.toLowerCase().includes(query) ||
+          task.category?.toLowerCase().includes(query)
+      );
+    }
+    
+    // Apply sorting
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case "date-desc":
+          return new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0);
+        case "date-asc":
+          return new Date(a.createdAt || a.date || 0) - new Date(b.createdAt || b.date || 0);
+        case "status":
+          const statusOrder = { pending: 1, "in-progress": 2, completed: 3 };
+          return (statusOrder[a.status] || 0) - (statusOrder[b.status] || 0);
+        case "name":
+          return (a.firstName || "").localeCompare(b.firstName || "");
+        case "category":
+          return (a.category || "General").localeCompare(b.category || "General");
+        default:
+          return 0;
+      }
+    });
+    
+    setFilteredTasks(filtered);
+    
+    // Calculate stats
+    const calculatedStats = {
+      total: tasks.length,
+      pending: tasks.filter(t => t.status === "pending").length,
+      inProgress: tasks.filter(t => t.status === "in-progress").length,
+      completed: tasks.filter(t => t.status === "completed").length
+    };
+    setStats(calculatedStats);
+  }, [tasks, statusFilter, categoryFilter, searchQuery, sortBy]);
 
   const fetchTasks = async () => {
     setLoading(true);
@@ -547,26 +620,167 @@ const AgentTasksPanel = ({ agentId, agentName, onClose }) => {
           <p>No tasks assigned to this agent</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {tasks.map((task) => (
-            <div
-              key={task._id}
-              className="bg-slate-700/50 rounded-lg p-4 border border-slate-600/50 hover:border-slate-500 transition-all"
+        <>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div 
+              onClick={() => setStatusFilter("all")}
+              className={`bg-slate-700/50 rounded-lg p-4 border border-slate-600/50 cursor-pointer hover:border-indigo-500/50 transition-all ${statusFilter === "all" ? "border-indigo-500" : ""}`}
             >
-              <h4 className="font-semibold text-slate-200 mb-2">{task.firstName}</h4>
-              <p className="text-sm text-slate-400 mb-1">Phone: {task.phone}</p>
-              <p className="text-sm text-slate-400 mb-3">{task.notes}</p>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span
-                  className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(task.status)}`}
-                >
-                  {task.status.toUpperCase()}
-                </span>
-                <CategoryBadge category={task.category || "General"} size="sm" />
-              </div>
+              <div className="text-sm text-slate-400 mb-1">Total Tasks</div>
+              <div className="text-2xl font-bold text-slate-200">{stats.total}</div>
             </div>
-          ))}
-        </div>
+            <div 
+              onClick={() => setStatusFilter("pending")}
+              className={`bg-slate-700/50 rounded-lg p-4 border border-slate-600/50 cursor-pointer hover:border-red-500/50 transition-all ${statusFilter === "pending" ? "border-red-500" : ""}`}
+            >
+              <div className="text-sm text-slate-400 mb-1">Pending</div>
+              <div className="text-2xl font-bold text-red-400">{stats.pending}</div>
+            </div>
+            <div 
+              onClick={() => setStatusFilter("in-progress")}
+              className={`bg-slate-700/50 rounded-lg p-4 border border-slate-600/50 cursor-pointer hover:border-amber-500/50 transition-all ${statusFilter === "in-progress" ? "border-amber-500" : ""}`}
+            >
+              <div className="text-sm text-slate-400 mb-1">In Progress</div>
+              <div className="text-2xl font-bold text-amber-400">{stats.inProgress}</div>
+            </div>
+            <div 
+              onClick={() => setStatusFilter("completed")}
+              className={`bg-slate-700/50 rounded-lg p-4 border border-slate-600/50 cursor-pointer hover:border-emerald-500/50 transition-all ${statusFilter === "completed" ? "border-emerald-500" : ""}`}
+            >
+              <div className="text-sm text-slate-400 mb-1">Completed</div>
+              <div className="text-2xl font-bold text-emerald-400">{stats.completed}</div>
+            </div>
+          </div>
+
+          {/* Filters Section */}
+          <div className="space-y-4 mb-6">
+            {/* Search Bar */}
+            <div className="relative">
+              <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by name, phone, or notes..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-slate-200 placeholder-slate-400 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all"
+              />
+            </div>
+
+            {/* Status and Sort Filters */}
+            <div className="flex flex-wrap gap-4 items-center">
+              {/* Status Filter */}
+              <div className="flex items-center gap-2">
+                <FaFilter className="text-slate-400" />
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-4 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all"
+                >
+                  <option value="all">All Status</option>
+                  <option value="pending">Pending</option>
+                  <option value="in-progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </div>
+
+              {/* Sort Filter */}
+              <div className="flex items-center gap-2">
+                <FaSort className="text-slate-400" />
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="px-4 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all"
+                >
+                  <option value="date-desc">Date (Newest)</option>
+                  <option value="date-asc">Date (Oldest)</option>
+                  <option value="status">Status</option>
+                  <option value="name">Name (A-Z)</option>
+                  <option value="category">Category</option>
+                </select>
+              </div>
+
+              {/* Clear Filters Button */}
+              {(statusFilter !== "all" || categoryFilter !== "All" || searchQuery.trim() || sortBy !== "date-desc") && (
+                <button
+                  onClick={() => {
+                    setStatusFilter("all");
+                    setCategoryFilter("All");
+                    setSearchQuery("");
+                    setSortBy("date-desc");
+                  }}
+                  className="px-4 py-2 bg-slate-700/50 hover:bg-slate-700 border border-slate-600/50 rounded-lg text-slate-300 hover:text-slate-200 transition-all flex items-center gap-2"
+                >
+                  <FaTimes />
+                  Clear Filters
+                </button>
+              )}
+            </div>
+
+            {/* Category Filter */}
+            <CategoryFilter
+              selectedCategory={categoryFilter}
+              onCategoryChange={setCategoryFilter}
+              theme="admin"
+            />
+          </div>
+
+          {/* Results Count */}
+          <div className="mb-4 text-sm text-slate-400">
+            Showing {filteredTasks.length} of {tasks.length} tasks
+            {(statusFilter !== "all" || categoryFilter !== "All" || searchQuery.trim()) && (
+              <button
+                onClick={() => {
+                  setStatusFilter("all");
+                  setCategoryFilter("All");
+                  setSearchQuery("");
+                }}
+                className="ml-2 text-indigo-400 hover:text-indigo-300 underline"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+
+          {/* Tasks Grid */}
+          {filteredTasks.length === 0 ? (
+            <div className="text-center py-12 text-slate-400">
+              <FaTasks className="text-4xl mx-auto mb-4 opacity-50" />
+              <p>No tasks match your filters</p>
+              <button
+                onClick={() => {
+                  setStatusFilter("all");
+                  setCategoryFilter("All");
+                  setSearchQuery("");
+                }}
+                className="mt-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all"
+              >
+                Clear Filters
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredTasks.map((task) => (
+                <div
+                  key={task._id}
+                  className="bg-slate-700/50 rounded-lg p-4 border border-slate-600/50 hover:border-slate-500 transition-all"
+                >
+                  <h4 className="font-semibold text-slate-200 mb-2">{task.firstName}</h4>
+                  <p className="text-sm text-slate-400 mb-1">Phone: {task.phone}</p>
+                  <p className="text-sm text-slate-400 mb-3">{task.notes}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span
+                      className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(task.status)}`}
+                    >
+                      {task.status.toUpperCase()}
+                    </span>
+                    <CategoryBadge category={task.category || "General"} size="sm" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
