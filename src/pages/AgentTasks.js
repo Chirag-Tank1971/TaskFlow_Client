@@ -32,6 +32,8 @@ import {
   formatDate,
   formatCompletionTime,
 } from "../utils/agentStats";
+import CategoryBadge from "../components/CategoryBadge";
+import CategoryFilter from "../components/CategoryFilter";
 
 const AgentTasks = () => {
   const [agent, setAgent] = useState(null);
@@ -44,6 +46,7 @@ const AgentTasks = () => {
   const [taskToDelete, setTaskToDelete] = useState(null);
   const [taskDetailsModal, setTaskDetailsModal] = useState(null);
   const [filter, setFilter] = useState("all"); // "all", "pending", "in-progress", "completed"
+  const [categoryFilter, setCategoryFilter] = useState("All"); // Category filter
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("date-desc"); // "date-desc", "date-asc", "status", "name"
   const [viewMode, setViewMode] = useState("list"); // "list", "grid"
@@ -75,13 +78,18 @@ const AgentTasks = () => {
     fetchTasks();
   }, []);
 
-  // Filter and sort tasks when tasks, filter, searchQuery, or sortBy changes
+  // Filter and sort tasks when tasks, filter, categoryFilter, searchQuery, or sortBy changes
   useEffect(() => {
     let filtered = [...tasks];
 
     // Apply status filter
     if (filter !== "all") {
       filtered = filtered.filter((task) => task.status === filter);
+    }
+
+    // Apply category filter
+    if (categoryFilter !== "All") {
+      filtered = filtered.filter((task) => task.category === categoryFilter);
     }
 
     // Apply search query
@@ -91,7 +99,8 @@ const AgentTasks = () => {
         (task) =>
           task.firstName?.toLowerCase().includes(query) ||
           task.phone?.includes(query) ||
-          task.notes?.toLowerCase().includes(query)
+          task.notes?.toLowerCase().includes(query) ||
+          task.category?.toLowerCase().includes(query)
       );
     }
 
@@ -383,6 +392,15 @@ const AgentTasks = () => {
           />
         </div>
 
+        {/* Category Filter */}
+        <div className="mb-6">
+          <CategoryFilter
+            selectedCategory={categoryFilter}
+            onCategoryChange={setCategoryFilter}
+            theme="agent"
+          />
+        </div>
+
         {/* Search and Filter Bar */}
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700/50 shadow-xl mb-6">
           <div className="flex flex-col md:flex-row gap-4">
@@ -391,7 +409,7 @@ const AgentTasks = () => {
               <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search by name, phone, or notes..."
+                placeholder="Search by name, phone, notes, or category..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-10 py-2 bg-slate-700/50 border border-slate-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
@@ -663,9 +681,12 @@ const TaskCard = ({ task, viewMode, onStatusUpdate, onDelete, onViewDetails }) =
         </div>
 
         <div className="flex items-center justify-between mb-4">
-          <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(task.status)}`}>
-            {task.status}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(task.status)}`}>
+              {task.status}
+            </span>
+            <CategoryBadge category={task.category || "General"} size="sm" />
+          </div>
           {getCompletionTime() && (
             <span className="text-xs text-slate-500 flex items-center gap-1">
               <FaClock />
@@ -740,9 +761,12 @@ const TaskCard = ({ task, viewMode, onStatusUpdate, onDelete, onViewDetails }) =
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(task.status)}`}>
-                {task.status}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(task.status)}`}>
+                  {task.status}
+                </span>
+                <CategoryBadge category={task.category || "General"} size="sm" />
+              </div>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -942,13 +966,17 @@ const TaskDetailsModal = ({ task, onClose, onStatusUpdate, onDelete }) => {
             </div>
           </div>
 
-          {/* Status and Dates */}
+          {/* Status and Category */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-2">Status</label>
               <span className={`inline-block px-4 py-2 rounded-full text-sm font-semibold border ${getStatusColor(task.status)}`}>
                 {task.status}
               </span>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-400 mb-2">Category</label>
+              <CategoryBadge category={task.category || "General"} size="md" />
             </div>
             {getCompletionTime() && (
               <div>

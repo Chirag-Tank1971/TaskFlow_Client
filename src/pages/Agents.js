@@ -27,7 +27,7 @@ import {
 } from "react-icons/fa";
 import { useNavigate, Link } from "react-router-dom";
 import API_BASE_URL from "../config/api";
-
+import CategoryBadge from "../components/CategoryBadge";
 // Enhanced Confirmation Modal Component
 const ConfirmationModal = ({ isOpen, onClose, onConfirm, message, title = "Confirm Action" }) => {
   if (!isOpen) return null;
@@ -556,11 +556,14 @@ const AgentTasksPanel = ({ agentId, agentName, onClose }) => {
               <h4 className="font-semibold text-slate-200 mb-2">{task.firstName}</h4>
               <p className="text-sm text-slate-400 mb-1">Phone: {task.phone}</p>
               <p className="text-sm text-slate-400 mb-3">{task.notes}</p>
-              <span
-                className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(task.status)}`}
-              >
-                {task.status.toUpperCase()}
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(task.status)}`}
+                >
+                  {task.status.toUpperCase()}
+                </span>
+                <CategoryBadge category={task.category || "General"} size="sm" />
+              </div>
             </div>
           ))}
         </div>

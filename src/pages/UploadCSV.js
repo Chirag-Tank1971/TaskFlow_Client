@@ -44,6 +44,7 @@ const UploadCSV = () => {
   const [filePreview, setFilePreview] = useState(null);
   const [showFormatGuide, setShowFormatGuide] = useState(false);
   const [userName, setUserName] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(null); // Progress tracking
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -227,6 +228,7 @@ const UploadCSV = () => {
 
     setLoading(true);
     setError("");
+    setUploadProgress(null);
 
     try {
       const response = await axios.post(`${API_BASE_URL}/api/upload`, formData, {
@@ -236,25 +238,130 @@ const UploadCSV = () => {
         },
       });
 
-      // Show success toast
-      toast.success(
-        response.data.message || "CSV uploaded and tasks distributed successfully!",
-        {
-          position: "top-right",
-          autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-        }
-      );
+      const jobId = response.data.jobId;
+      
+      if (!jobId) {
+        throw new Error("No job ID received from server");
+      }
 
-      // Clear the file input
-      setFile(null);
-      setFilePreview(null);
+      // Initialize progress
+      setUploadProgress({
+        status: 'initializing',
+        currentStep: 'Starting upload...',
+        progress: 0,
+        totalTasks: 0,
+        processedTasks: 0,
+        categorizedTasks: 0,
+        defaultTasks: 0,
+        rateLimitHit: false
+      });
 
-      // Refresh stats and history
-      await Promise.all([fetchUploadStats(), fetchUploadHistory()]);
+      // Poll progress with authenticated requests
+      const pollProgress = async () => {
+        let pollCount = 0;
+        const maxPolls = 1200; // 10 minutes max (1200 * 500ms)
+        
+        const pollInterval = setInterval(async () => {
+          pollCount++;
+          
+          try {
+            const progressResponse = await axios.get(
+              `${API_BASE_URL}/api/upload/progress/${jobId}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              }
+            );
+
+            const progress = progressResponse.data;
+            setUploadProgress(progress);
+
+            // Check if completed or failed
+            if (progress.status === 'completed' || progress.status === 'failed') {
+              clearInterval(pollInterval);
+              setLoading(false);
+
+              if (progress.status === 'completed') {
+                // Show success toast
+                toast.success("File uploaded and tasks distributed successfully!", {
+                  position: "top-right",
+                  autoClose: 3000,
+                  hideProgressBar: false,
+                  closeOnClick: true,
+                  pauseOnHover: true,
+                  draggable: true,
+                });
+
+                // Show rate limit warning if applicable
+                if (progress.rateLimitHit) {
+                  const { categorizedTasks, defaultTasks } = progress;
+                  toast.warning(
+                    `AI rate limit reached. ${categorizedTasks} tasks categorized, ${defaultTasks} tasks set to default category.`,
+                    {
+                      position: "top-right",
+                      autoClose: 5000,
+                      hideProgressBar: false,
+                      closeOnClick: true,
+                      pauseOnHover: true,
+                      draggable: true,
+                    }
+                  );
+                }
+
+                // Clear the file input
+                setFile(null);
+                setFilePreview(null);
+
+                // Refresh stats and history
+                await Promise.all([fetchUploadStats(), fetchUploadHistory()]);
+              } else if (progress.status === 'failed') {
+                toast.error(progress.error || "Upload failed. Please try again.", {
+                  position: "top-right",
+                  autoClose: 5000,
+                });
+                setError(progress.error || "Upload failed");
+              }
+
+              // Clear progress after 3 seconds
+              setTimeout(() => {
+                setUploadProgress(null);
+              }, 3000);
+            }
+          } catch (err) {
+            console.error("Progress polling error:", err);
+            // Continue polling unless it's a 404 (job not found)
+            if (err.response?.status === 404) {
+              clearInterval(pollInterval);
+              setLoading(false);
+              setUploadProgress(null);
+              toast.error("Upload job not found. Please try uploading again.", {
+                position: "top-right",
+                autoClose: 5000,
+              });
+            }
+          }
+
+          // Timeout after max polls
+          if (pollCount >= maxPolls) {
+            clearInterval(pollInterval);
+            setLoading(false);
+            setUploadProgress(prev => {
+              if (prev && prev.status !== 'completed' && prev.status !== 'failed') {
+                toast.error("Upload timeout. Please check the upload status.", {
+                  position: "top-right",
+                  autoClose: 5000,
+                });
+              }
+              return null;
+            });
+          }
+        }, 500); // Poll every 500ms for smooth updates
+      };
+
+      // Start polling
+      pollProgress();
+
     } catch (err) {
       console.error("Upload Error:", err.response?.data || err.message);
       const errorMessage =
@@ -521,6 +628,78 @@ const UploadCSV = () => {
                   </>
                 )}
               </button>
+
+              {/* Progress Bar */}
+              {uploadProgress && (
+                <div className="mt-6 bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700/50 shadow-xl">
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-slate-300">
+                        {uploadProgress.currentStep || 'Processing...'}
+                      </span>
+                      <span className="text-sm font-bold text-indigo-400">
+                        {uploadProgress.progress || 0}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-700/50 rounded-full h-3 overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500 ease-out flex items-center justify-end pr-2"
+                        style={{ width: `${uploadProgress.progress || 0}%` }}
+                      >
+                        {uploadProgress.progress > 10 && (
+                          <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Progress Details */}
+                  {uploadProgress.totalTasks > 0 && (
+                    <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-700/50">
+                      <div className="text-center">
+                        <p className="text-xs text-slate-400 mb-1">Tasks Processed</p>
+                        <p className="text-lg font-bold text-slate-200">
+                          {uploadProgress.processedTasks || 0} / {uploadProgress.totalTasks}
+                        </p>
+                      </div>
+                      {uploadProgress.status === 'categorizing' && (
+                        <div className="text-center">
+                          <p className="text-xs text-slate-400 mb-1">AI Categorized</p>
+                          <p className="text-lg font-bold text-emerald-400">
+                            {uploadProgress.categorizedTasks || 0}
+                          </p>
+                        </div>
+                      )}
+                      {uploadProgress.rateLimitHit && (
+                        <div className="col-span-2 mt-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                          <p className="text-xs text-amber-400 flex items-center gap-2">
+                            <FaExclamationTriangle />
+                            Rate limit reached. Remaining tasks set to default category.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Status Badge */}
+                  <div className="mt-4 flex items-center justify-center">
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      uploadProgress.status === 'completed' 
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        : uploadProgress.status === 'failed'
+                        ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                        : 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
+                    }`}>
+                      {uploadProgress.status === 'parsing' && '📄 Parsing CSV'}
+                      {uploadProgress.status === 'categorizing' && '🤖 Categorizing Tasks'}
+                      {uploadProgress.status === 'saving' && '💾 Saving to Database'}
+                      {uploadProgress.status === 'completed' && '✅ Completed'}
+                      {uploadProgress.status === 'failed' && '❌ Failed'}
+                      {uploadProgress.status === 'initializing' && '⚙️ Initializing'}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* CSV Format Guide */}
