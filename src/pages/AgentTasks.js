@@ -22,6 +22,9 @@ import {
   FaSync,
   FaCalendarDay,
   FaUser,
+  FaCheckSquare,
+  FaSquare,
+  FaTimes,
 } from "react-icons/fa";
 import { MdManageAccounts, MdPendingActions, MdIncompleteCircle } from "react-icons/md";
 import { ToastContainer, toast } from "react-toastify";
@@ -57,6 +60,13 @@ const AgentTasks = () => {
     completedTasks: 0,
     completionRate: 0,
   });
+  // Multi-select state
+  const [selectedTasks, setSelectedTasks] = useState(new Set()); // Use Set for O(1) lookup
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+  const [isBulkStatusModalOpen, setIsBulkStatusModalOpen] = useState(false);
+  const [pendingBulkStatus, setPendingBulkStatus] = useState(null);
 
   const navigate = useNavigate();
 
@@ -126,7 +136,7 @@ const AgentTasks = () => {
     // Calculate statistics
     const calculatedStats = calculateStats(tasks);
     setStats(calculatedStats);
-  }, [tasks, filter, searchQuery, sortBy]);
+  }, [tasks, filter, categoryFilter, searchQuery, sortBy]);
 
   // Get token with robust parsing
   const getToken = () => {
@@ -256,6 +266,159 @@ const AgentTasks = () => {
 
   const clearSearch = () => {
     setSearchQuery("");
+  };
+
+  // Multi-select functions
+  const toggleSelectMode = () => {
+    setIsSelectMode(!isSelectMode);
+    if (isSelectMode) {
+      // Clear selection when exiting select mode
+      setSelectedTasks(new Set());
+    }
+  };
+
+  const toggleTaskSelection = (taskId) => {
+    const newSelected = new Set(selectedTasks);
+    if (newSelected.has(taskId)) {
+      newSelected.delete(taskId);
+    } else {
+      newSelected.add(taskId);
+    }
+    setSelectedTasks(newSelected);
+  };
+
+  const selectAllTasks = () => {
+    if (selectedTasks.size === filteredTasks.length) {
+      // Deselect all
+      setSelectedTasks(new Set());
+    } else {
+      // Select all filtered tasks
+      const allIds = new Set(filteredTasks.map(task => task._id));
+      setSelectedTasks(allIds);
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedTasks(new Set());
+  };
+
+  const isTaskSelected = (taskId) => {
+    return selectedTasks.has(taskId);
+  };
+
+  // Bulk operations
+  const handleBulkDelete = async () => {
+    if (selectedTasks.size === 0) {
+      toast.warning("Please select at least one task to delete");
+      return;
+    }
+    setIsBulkDeleteModalOpen(true);
+  };
+
+  const confirmBulkDelete = async () => {
+    try {
+      setBulkActionLoading(true);
+      const token = getToken();
+      if (!token) {
+        setError("Authentication required. Please log in again.");
+        return;
+      }
+
+      const taskIds = Array.from(selectedTasks);
+
+      const response = await axios.delete(
+        `${API_BASE_URL}/api/tasks/bulk`,
+        {
+          data: { taskIds },
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      // Remove deleted tasks from state
+      setTasks(tasks.filter(task => !selectedTasks.has(task._id)));
+      
+      // Clear selection and exit select mode
+      setSelectedTasks(new Set());
+      setIsSelectMode(false);
+      setIsBulkDeleteModalOpen(false);
+
+      toast.success(`Successfully deleted ${response.data.deletedCount} task(s)`);
+      setSuccess(`Successfully deleted ${response.data.deletedCount} task(s)`);
+    } catch (error) {
+      console.error("Bulk delete error:", error);
+      const errorMessage = error.response?.data?.message || "Failed to delete tasks";
+      toast.error(errorMessage);
+      setError(errorMessage);
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleBulkStatusUpdate = (status) => {
+    if (selectedTasks.size === 0) {
+      toast.warning("Please select at least one task to update");
+      return;
+    }
+    setPendingBulkStatus(status);
+    setIsBulkStatusModalOpen(true);
+  };
+
+  const confirmBulkStatusUpdate = async () => {
+    try {
+      setBulkActionLoading(true);
+      const token = getToken();
+      if (!token) {
+        setError("Authentication required. Please log in again.");
+        return;
+      }
+
+      const taskIds = Array.from(selectedTasks);
+
+      const response = await axios.post(
+        `${API_BASE_URL}/api/tasks/bulk/status`,
+        {
+          taskIds,
+          status: pendingBulkStatus,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      // Update tasks in state
+      const updatedTaskIds = response.data.updatedTasks.map(t => t._id);
+      const updatedTasksMap = new Map(
+        response.data.updatedTasks.map(t => [t._id, t])
+      );
+
+      setTasks(tasks.map(task => {
+        if (updatedTasksMap.has(task._id)) {
+          return updatedTasksMap.get(task._id);
+        }
+        return task;
+      }));
+
+      // Clear selection and exit select mode
+      setSelectedTasks(new Set());
+      setIsSelectMode(false);
+      setIsBulkStatusModalOpen(false);
+      setPendingBulkStatus(null);
+
+      const statusLabel = pendingBulkStatus.replace("-", " ");
+      toast.success(`Successfully updated ${response.data.updatedCount} task(s) to ${statusLabel}`);
+      setSuccess(`Successfully updated ${response.data.updatedCount} task(s) to ${statusLabel}`);
+    } catch (error) {
+      console.error("Bulk status update error:", error);
+      const errorMessage = error.response?.data?.message || "Failed to update task status";
+      toast.error(errorMessage);
+      setError(errorMessage);
+    } finally {
+      setBulkActionLoading(false);
+    }
   };
 
   return (
@@ -507,9 +670,88 @@ const AgentTasks = () => {
                   <FaTh />
                 </button>
               </div>
+
+              {/* Select Mode Toggle */}
+              <button
+                onClick={toggleSelectMode}
+                className={`px-4 py-2 rounded-lg font-semibold transition-all text-sm flex items-center gap-2 border-2 ${
+                  isSelectMode
+                    ? "bg-orange-500 text-white shadow-lg border-orange-400"
+                    : "bg-slate-800 text-orange-400 hover:bg-slate-700 border-orange-500/50 hover:border-orange-500"
+                }`}
+                title={isSelectMode ? "Exit select mode" : "Select multiple tasks"}
+              >
+                {isSelectMode ? <FaCheckSquare className="text-lg" /> : <FaSquare className="text-lg" />}
+                <span>Select</span>
+              </button>
             </div>
           </div>
         </div>
+
+        {/* Bulk Action Toolbar */}
+        {isSelectMode && selectedTasks.size > 0 && (
+          <div className="sticky top-20 z-40 bg-gradient-to-r from-orange-600 via-amber-600 to-yellow-600 rounded-xl p-4 mb-6 shadow-2xl border border-orange-500/50">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedTasks.size === filteredTasks.length && filteredTasks.length > 0}
+                    onChange={selectAllTasks}
+                    className="w-5 h-5 rounded border-slate-300 text-orange-600 focus:ring-orange-500 focus:ring-2"
+                    title="Select all"
+                  />
+                  <span className="text-white font-semibold">
+                    {selectedTasks.size} task{selectedTasks.size !== 1 ? "s" : ""} selected
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => handleBulkStatusUpdate("pending")}
+                  disabled={bulkActionLoading}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <MdPendingActions />
+                  Mark Pending
+                </button>
+                <button
+                  onClick={() => handleBulkStatusUpdate("in-progress")}
+                  disabled={bulkActionLoading}
+                  className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg text-sm font-medium transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <MdIncompleteCircle />
+                  Mark In Progress
+                </button>
+                <button
+                  onClick={() => handleBulkStatusUpdate("completed")}
+                  disabled={bulkActionLoading}
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-medium transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <FaCheckCircle />
+                  Mark Complete
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={bulkActionLoading}
+                  className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <FaTrash />
+                  Delete
+                </button>
+                <button
+                  onClick={clearSelection}
+                  disabled={bulkActionLoading}
+                  className="px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <FaTimes />
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tasks Display Area */}
         {loading ? (
@@ -542,6 +784,9 @@ const AgentTasks = () => {
                 onStatusUpdate={handleStatusUpdate}
                 onDelete={handleDeleteClick}
                 onViewDetails={setTaskDetailsModal}
+                isSelectMode={isSelectMode}
+                isSelected={isTaskSelected(task._id)}
+                onToggleSelect={() => toggleTaskSelection(task._id)}
               />
             ))}
           </div>
@@ -564,6 +809,38 @@ const AgentTasks = () => {
         onConfirm={() => handleTaskDeletion(taskToDelete)}
         message="Are you sure you want to delete this task? This action cannot be undone."
         title="Delete Task"
+      />
+
+      {/* Bulk Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={isBulkDeleteModalOpen}
+        onClose={() => {
+          setIsBulkDeleteModalOpen(false);
+          if (!bulkActionLoading) {
+            setSelectedTasks(new Set());
+          }
+        }}
+        onConfirm={confirmBulkDelete}
+        message={`Are you sure you want to delete ${selectedTasks.size} selected task${selectedTasks.size !== 1 ? "s" : ""}? This action cannot be undone.`}
+        title="Delete Selected Tasks"
+        confirmText={`Delete ${selectedTasks.size} Task${selectedTasks.size !== 1 ? "s" : ""}`}
+        confirmColor="red"
+        loading={bulkActionLoading}
+      />
+
+      {/* Bulk Status Update Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={isBulkStatusModalOpen}
+        onClose={() => {
+          setIsBulkStatusModalOpen(false);
+          setPendingBulkStatus(null);
+        }}
+        onConfirm={confirmBulkStatusUpdate}
+        message={`Are you sure you want to mark ${selectedTasks.size} selected task${selectedTasks.size !== 1 ? "s" : ""} as ${pendingBulkStatus?.replace("-", " ")}?`}
+        title={`Mark Tasks as ${pendingBulkStatus?.replace("-", " ").replace(/\b\w/g, l => l.toUpperCase())}`}
+        confirmText={`Update ${selectedTasks.size} Task${selectedTasks.size !== 1 ? "s" : ""}`}
+        confirmColor="orange"
+        loading={bulkActionLoading}
       />
 
       {/* Task Details Modal */}
@@ -627,7 +904,7 @@ const StatCard = ({ title, value, icon, gradient, loading }) => {
 };
 
 // Task Card Component
-const TaskCard = ({ task, viewMode, onStatusUpdate, onDelete, onViewDetails }) => {
+const TaskCard = ({ task, viewMode, onStatusUpdate, onDelete, onViewDetails, isSelectMode, isSelected, onToggleSelect }) => {
   const getStatusColor = (status) => {
     switch (status) {
       case "completed":
@@ -651,8 +928,27 @@ const TaskCard = ({ task, viewMode, onStatusUpdate, onDelete, onViewDetails }) =
 
   if (viewMode === "grid") {
     return (
-      <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700/50 shadow-xl hover:border-orange-500/50 hover:shadow-2xl transition-all duration-300 group">
+      <div 
+        className={`bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border shadow-xl hover:shadow-2xl transition-all duration-300 group ${
+          isSelected 
+            ? "border-orange-500 ring-2 ring-orange-500/50" 
+            : "border-slate-700/50 hover:border-orange-500/50"
+        }`}
+        onClick={isSelectMode ? onToggleSelect : undefined}
+        style={{ cursor: isSelectMode ? "pointer" : "default" }}
+      >
         <div className="flex items-start justify-between mb-4">
+          {isSelectMode && (
+            <div className="mr-3 mt-1">
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={onToggleSelect}
+                onClick={(e) => e.stopPropagation()}
+                className="w-5 h-5 rounded border-slate-300 text-orange-600 focus:ring-orange-500 focus:ring-2 cursor-pointer"
+              />
+            </div>
+          )}
           <div className="flex-1">
             <h3 className="text-lg font-semibold text-slate-200 mb-2 group-hover:text-white transition-colors line-clamp-2">
               {task.notes || "Task"}
@@ -668,16 +964,18 @@ const TaskCard = ({ task, viewMode, onStatusUpdate, onDelete, onViewDetails }) =
               </p>
             </div>
           </div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(task._id);
-            }}
-            className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-            title="Delete task"
-          >
-            <FaTrash className="w-4 h-4" />
-          </button>
+          {!isSelectMode && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(task._id);
+              }}
+              className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+              title="Delete task"
+            >
+              <FaTrash className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         <div className="flex items-center justify-between mb-4">
@@ -695,40 +993,54 @@ const TaskCard = ({ task, viewMode, onStatusUpdate, onDelete, onViewDetails }) =
           )}
         </div>
 
-        <div className="flex flex-col gap-2">
-          {task.status === "pending" ? (
+        {!isSelectMode && (
+          <div className="flex flex-col gap-2">
+            {task.status === "pending" ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStatusUpdate(task._id, "in-progress");
+                }}
+                className="w-full bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2"
+              >
+                <MdPendingActions />
+                Start Progress
+              </button>
+            ) : task.status === "in-progress" ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStatusUpdate(task._id, "completed");
+                }}
+                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2"
+              >
+                <FaCheckCircle />
+                Mark Complete
+              </button>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStatusUpdate(task._id, "pending");
+                }}
+                className="w-full bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2"
+              >
+                <MdPendingActions />
+                Mark Pending
+              </button>
+            )}
             <button
-              onClick={() => onStatusUpdate(task._id, "in-progress")}
-              className="w-full bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2"
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewDetails(task);
+              }}
+              className="w-full bg-slate-700/50 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2"
             >
-              <MdPendingActions />
-              Start Progress
+              <FaEdit />
+              View Details
             </button>
-          ) : task.status === "in-progress" ? (
-            <button
-              onClick={() => onStatusUpdate(task._id, "completed")}
-              className="w-full bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2"
-            >
-              <FaCheckCircle />
-              Mark Complete
-            </button>
-          ) : (
-            <button
-              onClick={() => onStatusUpdate(task._id, "pending")}
-              className="w-full bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2"
-            >
-              <MdPendingActions />
-              Mark Pending
-            </button>
-          )}
-          <button
-            onClick={() => onViewDetails(task)}
-            className="w-full bg-slate-700/50 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2"
-          >
-            <FaEdit />
-            View Details
-          </button>
-        </div>
+          </div>
+        )}
 
         <div className="mt-4 pt-4 border-t border-slate-700/50">
           <p className="text-xs text-slate-500">
@@ -741,8 +1053,27 @@ const TaskCard = ({ task, viewMode, onStatusUpdate, onDelete, onViewDetails }) =
 
   // List View
   return (
-    <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700/50 shadow-xl hover:border-orange-500/50 hover:shadow-2xl transition-all duration-300 group">
+    <div 
+      className={`bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border shadow-xl hover:shadow-2xl transition-all duration-300 group ${
+        isSelected 
+          ? "border-orange-500 ring-2 ring-orange-500/50" 
+          : "border-slate-700/50 hover:border-orange-500/50"
+      }`}
+      onClick={isSelectMode ? onToggleSelect : undefined}
+      style={{ cursor: isSelectMode ? "pointer" : "default" }}
+    >
       <div className="flex items-start justify-between">
+        {isSelectMode && (
+          <div className="mr-4 mt-1">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={onToggleSelect}
+              onClick={(e) => e.stopPropagation()}
+              className="w-5 h-5 rounded border-slate-300 text-orange-600 focus:ring-orange-500 focus:ring-2 cursor-pointer"
+            />
+          </div>
+        )}
         <div className="flex-1">
           <div className="flex items-start justify-between mb-4">
             <div className="flex-1">
@@ -767,16 +1098,18 @@ const TaskCard = ({ task, viewMode, onStatusUpdate, onDelete, onViewDetails }) =
                 </span>
                 <CategoryBadge category={task.category || "General"} size="sm" />
               </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(task._id);
-                }}
-                className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                title="Delete task"
-              >
-                <FaTrash className="w-5 h-5" />
-              </button>
+              {!isSelectMode && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(task._id);
+                  }}
+                  className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                  title="Delete task"
+                >
+                  <FaTrash className="w-5 h-5" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -793,40 +1126,54 @@ const TaskCard = ({ task, viewMode, onStatusUpdate, onDelete, onViewDetails }) =
             )}
           </div>
 
-          <div className="flex items-center gap-3">
-            {task.status === "pending" ? (
+          {!isSelectMode && (
+            <div className="flex items-center gap-3">
+              {task.status === "pending" ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStatusUpdate(task._id, "in-progress");
+                  }}
+                  className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
+                >
+                  <MdPendingActions />
+                  Start Progress
+                </button>
+              ) : task.status === "in-progress" ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStatusUpdate(task._id, "completed");
+                  }}
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
+                >
+                  <FaCheckCircle />
+                  Mark Complete
+                </button>
+              ) : (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStatusUpdate(task._id, "pending");
+                  }}
+                  className="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
+                >
+                  <MdPendingActions />
+                  Mark Pending
+                </button>
+              )}
               <button
-                onClick={() => onStatusUpdate(task._id, "in-progress")}
-                className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onViewDetails(task);
+                }}
+                className="bg-slate-700/50 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
               >
-                <MdPendingActions />
-                Start Progress
+                <FaEdit />
+                View Details
               </button>
-            ) : task.status === "in-progress" ? (
-              <button
-                onClick={() => onStatusUpdate(task._id, "completed")}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
-              >
-                <FaCheckCircle />
-                Mark Complete
-              </button>
-            ) : (
-              <button
-                onClick={() => onStatusUpdate(task._id, "pending")}
-                className="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
-              >
-                <MdPendingActions />
-                Mark Pending
-              </button>
-            )}
-            <button
-              onClick={() => onViewDetails(task)}
-              className="bg-slate-700/50 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
-            >
-              <FaEdit />
-              View Details
-            </button>
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -873,8 +1220,31 @@ const EmptyState = ({ filter, searchQuery, onClearSearch, onClearFilter }) => {
 };
 
 // Confirmation Modal Component
-const ConfirmationModal = ({ isOpen, onClose, onConfirm, message, title = "Confirm Action" }) => {
+const ConfirmationModal = ({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  message, 
+  title = "Confirm Action",
+  confirmText = "Confirm",
+  confirmColor = "red",
+  loading = false
+}) => {
   if (!isOpen) return null;
+
+  const getConfirmButtonClass = () => {
+    const baseClass = "px-4 py-2 text-white rounded-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed";
+    switch (confirmColor) {
+      case "red":
+        return `${baseClass} bg-red-600 hover:bg-red-700`;
+      case "orange":
+        return `${baseClass} bg-orange-500 hover:bg-orange-600`;
+      case "green":
+        return `${baseClass} bg-emerald-500 hover:bg-emerald-600`;
+      default:
+        return `${baseClass} bg-red-600 hover:bg-red-700`;
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -884,15 +1254,18 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, message, title = "Confi
         <div className="flex justify-end space-x-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 transition-all"
+            disabled={loading}
+            className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all"
+            disabled={loading}
+            className={getConfirmButtonClass()}
           >
-            Delete
+            {loading && <FaSpinner className="animate-spin" />}
+            {confirmText}
           </button>
         </div>
       </div>
