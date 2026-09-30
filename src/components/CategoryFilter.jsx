@@ -1,48 +1,49 @@
 import React from "react";
-import { FaFilter, FaTimes } from "react-icons/fa";
+import { Filter, X } from "lucide-react";
 
 const CATEGORIES = ["All", "Support", "Sales", "Technical", "Billing", "Urgent", "General"];
 
-const CategoryFilter = ({ selectedCategory, onCategoryChange, theme = "admin" }) => {
-  const isAdminTheme = theme === "admin";
-  const accentColorClass = isAdminTheme ? "text-indigo-400" : "text-orange-400";
-  const activeBgClass = isAdminTheme ? "bg-indigo-500" : "bg-orange-500";
-
+const CategoryFilter = ({ selectedCategory = "All", onCategoryChange, theme = "admin" }) => {
   return (
-    <div className="bg-slate-800/50 backdrop-blur-sm rounded-lg p-4 border border-slate-700/50 shadow-lg">
-      <div className="flex items-center justify-between mb-3">
+    <div className="glass-panel rounded-xl p-3.5 border border-slate-800/80 shadow-md">
+      <div className="flex items-center justify-between mb-2.5">
         <div className="flex items-center gap-2">
-          <FaFilter className={accentColorClass} />
-          <h3 className="font-semibold text-slate-200">Filter by Category</h3>
+          <Filter className="w-3.5 h-3.5 text-indigo-400" />
+          <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+            AI Categories
+          </span>
         </div>
         {selectedCategory !== "All" && (
           <button
             onClick={() => onCategoryChange("All")}
-            className="text-slate-400 hover:text-slate-200 transition-colors"
-            title="Clear filter"
+            className="flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-white transition-colors"
           >
-            <FaTimes />
+            <X className="w-3 h-3" />
+            <span>Reset</span>
           </button>
         )}
       </div>
-      <div className="flex flex-wrap gap-2">
-        {CATEGORIES.map((category) => (
-          <button
-            key={category}
-            onClick={() => onCategoryChange(category)}
-            className={`px-4 py-2 rounded-lg font-medium transition-all ${
-              selectedCategory === category
-                ? `${activeBgClass} text-white shadow-lg transform scale-105`
-                : "bg-slate-700/50 text-slate-300 hover:bg-slate-700 hover:text-white"
-            }`}
-          >
-            {category}
-          </button>
-        ))}
+
+      <div className="flex flex-wrap gap-1.5">
+        {CATEGORIES.map((category) => {
+          const isSelected = selectedCategory === category;
+          return (
+            <button
+              key={category}
+              onClick={() => onCategoryChange(category)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer ${
+                isSelected
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30 scale-[1.02]"
+                  : "bg-slate-800/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800/60"
+              }`}
+            >
+              {category}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 };
 
 export default CategoryFilter;
-
